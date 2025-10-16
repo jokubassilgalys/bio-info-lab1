@@ -7,25 +7,25 @@ from Bio import SeqIO
 START_CODONS = ["ATG"]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 
-def main(path, method="original"):
+def main(path, method):
 
     if not os.path.exists(path):
         print(f"Path does not exist: {path}")
         sys.exit(1)
     if os.path.isfile(path):
         print(f"Input is a file: {path}")
-        process_fasta_file(path)
+        process_fasta_file(path, method)
     elif os.path.isdir(path):
         print(f"Input is a directory: {path}")
         for filename in os.listdir(path):
             if filename.endswith(".fasta"):
-                process_fasta_file(os.path.join(path, filename))
+                process_fasta_file(os.path.join(path, filename), method)
     else:
         print(f"Input is neither a file nor a directory: {path}")
         sys.exit(1)
 
-def process_fasta_file(fasta_file, show_examples=5, method="original"):
-    print(f"\n=== Processing file: {fasta_file} ===")
+def process_fasta_file(fasta_file, method, show_examples=5):
+    print(f"\n=== Processing file: {fasta_file} using method: {method}===")
     try:
         records = list(SeqIO.parse(fasta_file, "fasta"))
     except Exception as e:
@@ -61,47 +61,35 @@ def process_fasta_file(fasta_file, show_examples=5, method="original"):
             for orf in orfs[:show_examples]:
                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
     print("")
-     
 
+    
+     
 def reverse_complement(seq):
     complement = str.maketrans("ATGC", "TACG")
     return seq.translate(complement)[::-1]
 
+#
+# --method original
+# active by default
+# finds codon pairs by finding the stops first and backtracking to the farthest start
+#
 def find_orfs(seq):
     orfs = []
     seq_len = len(seq)
 
-    # for frame in range(3):
-    #     i = frame
-    #     while i < seq_len - 2:
-    #         codon = seq[i:i+3]
-    #         if codon in START_CODONS:
-    #             for j in range(i + 3, seq_len - 2, 3):
-    #                 stop_codon = seq[j:j+3]
-    #                 if stop_codon in STOP_CODONS:
-    #                     orf_seq = seq[i:j+3]
-    #                     orfs.append({
-    #                         "frame": frame + 1,
-    #                         "start": i + 1,
-    #                         "end": j + 3,
-    #                         "length": len(orf_seq),
-    #                         "sequence": orf_seq
-    #                     })
-    #                     break
-    #         i += 3
-    for frame in range(3):
-        codons = [seq[i:i+3] for i in range(frame, seq_len-2, 3)]
+    for frame in range(3):  # reading frame offset 0, 1, 2
+        codons = [seq[i:i+3] for i in range(frame, seq_len-2, 3)]   # list of codons in this frame
         codon_positions = list(range(frame, seq_len-2, 3))
 
         for j, codon in enumerate(codons):
-            if codon in STOP_CODONS:
+            if codon in STOP_CODONS:    # checking all codons for a stop
                 farthest_start_index = None
-                for k in range(j-1, -1, -1):
+                for k in range(j-1, -1, -1):    # backtracking until a stop memorising the farthest start
                     if codons[k] in STOP_CODONS:
                         break
                     if codons[k] in START_CODONS:
                         farthest_start_index = k
-                if farthest_start_index is not None:
+                if farthest_start_index is not None:    # if any start was found, append the ORF list
                     orf_seq = seq[codon_positions[farthest_start_index]:codon_positions[j]+3]
                     orfs.append({
                         "frame": frame + 1,
@@ -112,24 +100,27 @@ def find_orfs(seq):
                     })
     return orfs
 
-
+#
+# --method alternative
+# finds codon pairs without backtracking by matching earliest start to the first stop
+#
 def find_orfs_alternative(seq):
     orfs = []
     seq = seq.upper()
     seq_len = len(seq)
 
-    for frame in range(3):
-        start_positions = [i for i in range(frame, seq_len-2, 3) if seq[i:i+3] in START_CODONS]
-        stop_positions = [i for i in range(frame, seq_len-2, 3) if seq[i:i+3] in STOP_CODONS]
+    for frame in range(3):  # reading frame offset 0, 1, 2
+        start_positions = [i for i in range(frame, seq_len-2, 3) if seq[i:i+3] in START_CODONS] # list of all start codons
+        stop_positions = [i for i in range(frame, seq_len-2, 3) if seq[i:i+3] in STOP_CODONS]   # list of all stop codons
 
         combined = [(pos, 'start') for pos in start_positions] + [(pos, 'stop') for pos in stop_positions]
-        combined.sort(key=lambda x: x[0])
+        combined.sort(key=lambda x: x[0])   # list of only starts and stops
 
         last_start = None
         for pos, codon_type in combined:
-            if codon_type == 'start':
+            if codon_type == 'start' and last_start is None: # if start without an earlier unmatched start
                 last_start = pos
-            elif codon_type == 'stop' and last_start is not None:
+            elif codon_type == 'stop' and last_start is not None: # if found a stop with a memorised start
                 orf_seq = seq[last_start:pos+3]
                 orfs.append({
                     'frame': frame + 1,
@@ -156,6 +147,8 @@ def compare_methods(fasta_file, show_examples=5):
         orfs2 = find_orfs_alternative(seq)
         time2 = time.time() - start_time
         print(f"Method 2: {len(orfs2)} ORFs found in {time2:.6f} seconds")
+
+        print(f"Time difference: {abs(time1 - time2):.6f} seconds")
 
         set1 = set((orf['start'], orf['end'], orf['frame']) for orf in orfs1)
         set2 = set((orf['start'], orf['end'], orf['frame']) for orf in orfs2)
