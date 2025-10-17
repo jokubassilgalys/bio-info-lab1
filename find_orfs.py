@@ -7,6 +7,73 @@ from Bio import SeqIO
 START_CODONS = ["ATG"]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
 
+CODONTAB = {
+    'TCA': 'S',    
+    'TCC': 'S',    
+    'TCG': 'S',    
+    'TCT': 'S',    
+    'TTC': 'F',    
+    'TTT': 'F',    
+    'TTA': 'L',    
+    'TTG': 'L',    
+    'TAC': 'Y',    
+    'TAT': 'Y',    
+    'TAA': '*',    
+    'TAG': '*',    
+    'TGC': 'C',    
+    'TGT': 'C',    
+    'TGA': '*',    
+    'TGG': 'W',    
+    'CTA': 'L',    
+    'CTC': 'L',    
+    'CTG': 'L',    
+    'CTT': 'L',    
+    'CCA': 'P',    
+    'CCC': 'P',    
+    'CCG': 'P',    
+    'CCT': 'P',    
+    'CAC': 'H',    
+    'CAT': 'H',    
+    'CAA': 'Q',    
+    'CAG': 'Q',    
+    'CGA': 'R',    
+    'CGC': 'R',    
+    'CGG': 'R',    
+    'CGT': 'R',    
+    'ATA': 'I',    
+    'ATC': 'I',    
+    'ATT': 'I',    
+    'ATG': 'M',    
+    'ACA': 'T',    
+    'ACC': 'T',    
+    'ACG': 'T',    
+    'ACT': 'T',    
+    'AAC': 'N',    
+    'AAT': 'N',    
+    'AAA': 'K',    
+    'AAG': 'K',    
+    'AGC': 'S',    
+    'AGT': 'S',    
+    'AGA': 'R',    
+    'AGG': 'R',    
+    'GTA': 'V',    
+    'GTC': 'V',    
+    'GTG': 'V',    
+    'GTT': 'V',    
+    'GCA': 'A',    
+    'GCC': 'A',    
+    'GCG': 'A',    
+    'GCT': 'A',    
+    'GAC': 'D',    
+    'GAT': 'D',    
+    'GAA': 'E',    
+    'GAG': 'E',    
+    'GGA': 'G',    
+    'GGC': 'G',    
+    'GGG': 'G',    
+    'GGT': 'G'     
+}
+
 def main(path, method):
 
     if not os.path.exists(path):
@@ -60,13 +127,34 @@ def process_fasta_file(fasta_file, method, show_examples=5):
         print(f"Found {len(forward_orfs)} ORFs (>=100bp) on forward strand")
         print(f"Found {len(reverse_orfs)} ORFs (>=100bp) on reverse complement strand\n")
 
+        for orf in forward_orfs:
+            orf['protein'] = translate_orf(orf['sequence'])
+        for orf in reverse_orfs:
+            orf['protein'] = translate_orf(orf['sequence'])
+
         for strand, orfs in [("Forward", forward_orfs), ("Reverse", reverse_orfs)]:
             print(f"--- {strand} strand ORFs (first {show_examples}) ---")
             if not orfs:
                 print("  (none)")
             for orf in orfs[:show_examples]:
                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
+                print(f"  Protein (len {len(orf['protein'])} aa): {orf['protein']}")
     print("")
+
+def translate_codon(codon):
+    codon = codon.upper()
+    return CODONTAB.get(codon)
+
+def translate_orf(orf_seq):
+    protein = []
+    seq_len = len(orf_seq)
+    for i in range(0, seq_len - 2, 3):
+        codon = orf_seq[i:i+3]
+        aa = translate_codon(codon)
+        if aa is None:
+            continue
+        protein.append(aa)
+    return ''.join(protein)
 
 def filter_orfs(orfs, min_length=100):
     return [orf for orf in orfs if orf['length'] >= min_length]
