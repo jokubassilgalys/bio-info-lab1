@@ -25,7 +25,7 @@ def main(path, method):
         sys.exit(1)
 
 def process_fasta_file(fasta_file, method, show_examples=5):
-    print(f"\n=== Processing file: {fasta_file} using method: {method}===")
+    print(f"\n=== Processing file: {fasta_file} using method: {method} ===")
     try:
         records = list(SeqIO.parse(fasta_file, "fasta"))
     except Exception as e:
@@ -54,6 +54,12 @@ def process_fasta_file(fasta_file, method, show_examples=5):
         print(f"Found {len(forward_orfs)} ORFs on forward strand")
         print(f"Found {len(reverse_orfs)} ORFs on reverse complement strand")
 
+        forward_orfs = filter_orfs(forward_orfs, 100)
+        reverse_orfs = filter_orfs(reverse_orfs, 100)
+
+        print(f"Found {len(forward_orfs)} ORFs (>=100bp) on forward strand")
+        print(f"Found {len(reverse_orfs)} ORFs (>=100bp) on reverse complement strand\n")
+
         for strand, orfs in [("Forward", forward_orfs), ("Reverse", reverse_orfs)]:
             print(f"--- {strand} strand ORFs (first {show_examples}) ---")
             if not orfs:
@@ -62,8 +68,9 @@ def process_fasta_file(fasta_file, method, show_examples=5):
                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
     print("")
 
+def filter_orfs(orfs, min_length=100):
+    return [orf for orf in orfs if orf['length'] >= min_length]
     
-     
 def reverse_complement(seq):
     complement = str.maketrans("ATGC", "TACG")
     return seq.translate(complement)[::-1]

@@ -1,7 +1,5 @@
 # bio-info-lab1
-Current functionality:
-  * Reading fasta format files and finding all longest start/stop codon pairs
-
+Current functionality - reading fasta format files and finding all longest start/stop codon pairs, filtering them by length
 
 A file to use is passed as a launch argument 
 ```bash
