@@ -2,7 +2,10 @@ import os
 import sys
 import argparse
 import time
+import numpy as np
 from Bio import SeqIO
+from itertools import product
+from collections import Counter
 
 START_CODONS = ["ATG"]
 STOP_CODONS = ["TAA", "TAG", "TGA"]
@@ -139,7 +142,19 @@ def process_fasta_file(fasta_file, method, show_examples=5):
             for orf in orfs[:show_examples]:
                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
                 print(f"  Protein (len {len(orf['protein'])} aa): {orf['protein']}")
+
+        compare_all_sequences([orf['protein'] for orf in forward_orfs + reverse_orfs])
+
     print("")
+
+def filter_orfs(orfs, min_length=100):
+    return [orf for orf in orfs if orf['length'] >= min_length]
+    
+def reverse_complement(seq):
+    complement = str.maketrans("ATGC", "TACG")
+    return seq.translate(complement)[::-1]
+
+### Translation to proteins ### 
 
 def translate_codon(codon):
     codon = codon.upper()
@@ -156,12 +171,67 @@ def translate_orf(orf_seq):
         protein.append(aa)
     return ''.join(protein)
 
-def filter_orfs(orfs, min_length=100):
-    return [orf for orf in orfs if orf['length'] >= min_length]
-    
-def reverse_complement(seq):
-    complement = str.maketrans("ATGC", "TACG")
-    return seq.translate(complement)[::-1]
+###
+
+### Codon and Dicodon Frequencies and Distance Matrix ###
+
+def codon_frequencies(protein_seq):
+    codons = list("ACDEFGHIKLMNPQRSTVWY*")  # 20 standard + stop
+    freq = Counter(protein_seq)
+    return {a: freq.get(a, 0) for a in codons}
+
+def dicodon_frequencies(protein_seq):
+    dicodons = [protein_seq[i:i+2] for i in range(len(protein_seq)-1) if len(protein_seq[i:i+2]) == 2]
+    all_dicodons = [''.join(p) for p in product(list("ACDEFGHIKLMNPQRSTVWY*"), repeat=2)]
+    freq = Counter(dicodons)
+    return {d: freq.get(d, 0) for d in all_dicodons}
+
+def distance_matrix(frequency_list, metric='euclidean'):
+    # checking if any input frequency list is empty or inconsistent
+    if not frequency_list or any(len(f) == 0 for f in frequency_list):
+        raise ValueError("Empty or invalid frequency list passed to distance_matrix.")
+
+    # converting all to arrays with consistent key order
+    keys = list(frequency_list[0].keys())
+    freq_arrays = [np.array([f[k] for k in keys]) for f in frequency_list]
+
+    n = len(freq_arrays)
+    matrix = np.zeros((n, n))
+    for i in range(n):
+        for j in range(n):
+            if metric == 'euclidean':
+                matrix[i, j] = np.linalg.norm(freq_arrays[i] - freq_arrays[j])
+            elif metric == 'cosine':
+                a, b = freq_arrays[i], freq_arrays[j]
+                matrix[i, j] = 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+    return matrix
+
+def compare_all_sequences(protein_sequences):
+    codons_freqs = [codon_frequencies(p) for p in protein_sequences]
+    dicodon_freqs = [dicodon_frequencies(p) for p in protein_sequences]
+
+    # Print codons and dicodons with frequency > 0 for each sequence
+    for idx, seq in enumerate(protein_sequences):
+        print(f"\nSequence {idx+1} (length {len(seq)} aa):")
+
+        codon_freq = codons_freqs[idx]
+        dicodon_freq = dicodon_freqs[idx]
+
+        codon_line = ' '.join([f"{codon}:{count}" for codon, count in codon_freq.items() if count > 0])
+        print("Codons with frequency > 0:", codon_line)
+
+        dicodon_line = ' '.join([f"{d}:{count}" for d, count in dicodon_freq.items() if count > 0])
+        print("Dicodons with frequency > 0:", dicodon_line)
+
+    codon_dist = distance_matrix(codons_freqs, 'euclidean')
+    dicodon_dist = distance_matrix(dicodon_freqs, 'euclidean')
+
+    print("\nCodon Distance Matrix:\n", codon_dist)
+    print("Dicodon Distance Matrix:\n", dicodon_dist)
+
+    return codon_dist, dicodon_dist
+
+###
 
 #
 # --method original
@@ -227,6 +297,10 @@ def find_orfs_alternative(seq):
                 last_start = None
     return orfs
 
+#
+# --compare
+# optional statistics to compare find_orfs and find_orfs_alternative
+#
 def compare_methods(fasta_file, show_examples=5):
     records = list(SeqIO.parse(fasta_file, "fasta"))
     for record in records:
