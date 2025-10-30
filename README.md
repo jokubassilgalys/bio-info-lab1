@@ -15,7 +15,4 @@ The alternative can be run by using --method argument
 ```bash
 py find_orfs.py viruses/data/ --method alternative
 ```
-The differances between the methods can be compared by using --compare  (comparison in a single file, folder cannot be passed)
-```bash
-py find_orfs.py viruses/data/bacterial1.fasta --compare
-```
+Both methods find the same results

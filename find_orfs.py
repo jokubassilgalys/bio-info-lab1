@@ -225,9 +225,9 @@ def distance_matrix(frequency_list, metric='euclidean'):
         for j in range(n):
             if metric == 'euclidean':
                 matrix[i, j] = np.linalg.norm(freq_arrays[i] - freq_arrays[j])
-            elif metric == 'cosine':
-                a, b = freq_arrays[i], freq_arrays[j]
-                matrix[i, j] = 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+            # elif metric == 'cosine':
+            #     a, b = freq_arrays[i], freq_arrays[j]
+            #     matrix[i, j] = 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
     return matrix
 
 def compare_all_sequences(grouped_proteins):
@@ -330,52 +330,52 @@ def find_orfs_alternative(seq):
 # --compare
 # optional statistics to compare find_orfs and find_orfs_alternative
 #
-def compare_methods(fasta_file, show_examples=5):
-    records = list(SeqIO.parse(fasta_file, "fasta"))
-    for record in records:
-        seq = str(record.seq)
-        print(f"\nRecord: {record.id}")
+# def compare_methods(fasta_file, show_examples=5):
+#     records = list(SeqIO.parse(fasta_file, "fasta"))
+#     for record in records:
+#         seq = str(record.seq)
+#         print(f"\nRecord: {record.id}")
         
-        start_time = time.time()
-        orfs1 = find_orfs(seq)
-        time1 = time.time() - start_time
-        print(f"Method 1: {len(orfs1)} ORFs found in {time1:.6f} seconds")
+#         start_time = time.time()
+#         orfs1 = find_orfs(seq)
+#         time1 = time.time() - start_time
+#         print(f"Method 1: {len(orfs1)} ORFs found in {time1:.6f} seconds")
 
-        start_time = time.time()
-        orfs2 = find_orfs_alternative(seq)
-        time2 = time.time() - start_time
-        print(f"Method 2: {len(orfs2)} ORFs found in {time2:.6f} seconds")
+#         start_time = time.time()
+#         orfs2 = find_orfs_alternative(seq)
+#         time2 = time.time() - start_time
+#         print(f"Method 2: {len(orfs2)} ORFs found in {time2:.6f} seconds")
 
-        print(f"Time difference: {abs(time1 - time2):.6f} seconds")
+#         print(f"Time difference: {abs(time1 - time2):.6f} seconds")
 
-        set1 = set((orf['start'], orf['end'], orf['frame']) for orf in orfs1)
-        set2 = set((orf['start'], orf['end'], orf['frame']) for orf in orfs2)
-        common = set1 & set2
-        only1 = set1 - set2
-        only2 = set2 - set1
+#         set1 = set((orf['start'], orf['end'], orf['frame']) for orf in orfs1)
+#         set2 = set((orf['start'], orf['end'], orf['frame']) for orf in orfs2)
+#         common = set1 & set2
+#         only1 = set1 - set2
+#         only2 = set2 - set1
 
-        print(f"Common ORFs: {len(common)}")
-        print(f"Only in Method 1: {len(only1)}")
-        print(f"Only in Method 2: {len(only2)}")
+#         print(f"Common ORFs: {len(common)}")
+#         print(f"Only in Method 1: {len(only1)}")
+#         print(f"Only in Method 2: {len(only2)}")
 
-        if show_examples > 0:
-            print("Examples from Method 1:")
-            for orf in orfs1[:show_examples]:
-                print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
-            print("Examples from Method 2:")
-            for orf in orfs2[:show_examples]:
-                print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
+#         if show_examples > 0:
+#             print("Examples from Method 1:")
+#             for orf in orfs1[:show_examples]:
+#                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
+#             print("Examples from Method 2:")
+#             for orf in orfs2[:show_examples]:
+#                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
 
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run main or comparison mode for ORF finding.")
     parser.add_argument("fasta_file", help="Path to a FASTA file.")
-    parser.add_argument("--compare", action="store_true", help="Run comparison between both ORF finding methods.")
+    # parser.add_argument("--compare", action="store_true", help="Run comparison between both ORF finding methods.")
     parser.add_argument("--method", choices=["original", "alternative"], default="original", help="Choose which ORF finding method to use in main processing.")
     args = parser.parse_args()
 
-    if args.compare:
-        compare_methods(args.fasta_file)
-    else:
-        main(args.fasta_file, method=args.method)
+    # if args.compare:
+    #     compare_methods(args.fasta_file)
+    # else:
+    main(args.fasta_file, method=args.method)
