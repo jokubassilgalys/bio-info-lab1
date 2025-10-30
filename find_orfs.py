@@ -77,23 +77,49 @@ CODONTAB = {
     'GGT': 'G'     
 }
 
-def main(path, method):
-
-    if not os.path.exists(path):
-        print(f"Path does not exist: {path}")
+#
+# depending on the input path, process a single .fasta file or all .fasta files in a folder
+# single file process find all orfs, filters them and converts to proteins
+# multiple file process continues this by analyzing codon and dicodon frequencies and distance matrices
+#
+def main(folder, method):
+    if not os.path.exists(folder):
+        print(f"Path does not exist: {folder}")
         sys.exit(1)
-    if os.path.isfile(path):
-        print(f"Input is a file: {path}")
-        process_fasta_file(path, method)
-    elif os.path.isdir(path):
-        print(f"Input is a directory: {path}")
-        for filename in os.listdir(path):
+
+    grouped_proteins = {}
+
+    if os.path.isdir(folder): # process all .fasta files in the folder
+        for filename in os.listdir(folder):
             if filename.endswith(".fasta"):
-                process_fasta_file(os.path.join(path, filename), method)
+                group_name = os.path.splitext(filename)[0]
+                path = os.path.join(folder, filename)
+                records = list(SeqIO.parse(path, "fasta"))
+                group_proteins = []
+                for record in records:
+                    seq = str(record.seq)
+                    # finding all orfs
+                    forward_orfs = find_orfs(seq) if method == "original" else find_orfs_alternative(seq)
+                    reverse_orfs = find_orfs(reverse_complement(seq)) if method == "original" else find_orfs_alternative(reverse_complement(seq))
+                    # filtering by length
+                    forward_orfs = filter_orfs(forward_orfs, 100)
+                    reverse_orfs = filter_orfs(reverse_orfs, 100)
+                    # translating to proteins
+                    for orf in forward_orfs + reverse_orfs:
+                        orf['protein'] = translate_orf(orf['sequence'])
+                        group_proteins.append(orf['protein'])
+                grouped_proteins[group_name] = group_proteins
+        # distance matrix calculations        
+        compare_all_sequences(grouped_proteins)
+    elif os.path.isfile(folder): # process a single .fasta file
+        process_fasta_file(folder, method)
     else:
-        print(f"Input is neither a file nor a directory: {path}")
+        print(f"Invalid path: {folder}")
         sys.exit(1)
 
+#
+# process a single fasta file: find orfs, filter, translate and print results
+#
 def process_fasta_file(fasta_file, method, show_examples=5):
     print(f"\n=== Processing file: {fasta_file} using method: {method} ===")
     try:
@@ -143,8 +169,6 @@ def process_fasta_file(fasta_file, method, show_examples=5):
                 print(f"  Frame {orf['frame']}: {orf['start']}-{orf['end']} ({orf['length']} bp)")
                 print(f"  Protein (len {len(orf['protein'])} aa): {orf['protein']}")
 
-        compare_all_sequences([orf['protein'] for orf in forward_orfs + reverse_orfs])
-
     print("")
 
 def filter_orfs(orfs, min_length=100):
@@ -154,8 +178,9 @@ def reverse_complement(seq):
     complement = str.maketrans("ATGC", "TACG")
     return seq.translate(complement)[::-1]
 
-### Translation to proteins ### 
-
+#
+# Translation to proteins #
+#
 def translate_codon(codon):
     codon = codon.upper()
     return CODONTAB.get(codon)
@@ -171,10 +196,9 @@ def translate_orf(orf_seq):
         protein.append(aa)
     return ''.join(protein)
 
-###
-
-### Codon and Dicodon Frequencies and Distance Matrix ###
-
+#
+# Codon and Dicodon Frequencies and Distance Matrices #
+#
 def codon_frequencies(protein_seq):
     codons = list("ACDEFGHIKLMNPQRSTVWY*")  # 20 standard + stop
     freq = Counter(protein_seq)
@@ -193,7 +217,7 @@ def distance_matrix(frequency_list, metric='euclidean'):
 
     # converting all to arrays with consistent key order
     keys = list(frequency_list[0].keys())
-    freq_arrays = [np.array([f[k] for k in keys]) for f in frequency_list]
+    freq_arrays = [np.array([f[k] for k in keys]) / sum(f.values()) for f in frequency_list]  # normalization
 
     n = len(freq_arrays)
     matrix = np.zeros((n, n))
@@ -206,32 +230,37 @@ def distance_matrix(frequency_list, metric='euclidean'):
                 matrix[i, j] = 1 - np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
     return matrix
 
-def compare_all_sequences(protein_sequences):
-    codons_freqs = [codon_frequencies(p) for p in protein_sequences]
-    dicodon_freqs = [dicodon_frequencies(p) for p in protein_sequences]
+def compare_all_sequences(grouped_proteins):
+    all_names, all_sequences = [], []
+    for group, sequences in grouped_proteins.items():
+        combined = ''.join(sequences)
+        name = group[:10]
+        all_names.append(name)
+        all_sequences.append(combined)
 
-    # Print codons and dicodons with frequency > 0 for each sequence
-    for idx, seq in enumerate(protein_sequences):
-        print(f"\nSequence {idx+1} (length {len(seq)} aa):")
+    codon_freqs = [codon_frequencies(p) for p in all_sequences]
+    dicodon_freqs = [dicodon_frequencies(p) for p in all_sequences]
 
-        codon_freq = codons_freqs[idx]
-        dicodon_freq = dicodon_freqs[idx]
-
-        codon_line = ' '.join([f"{codon}:{count}" for codon, count in codon_freq.items() if count > 0])
-        print("Codons with frequency > 0:", codon_line)
-
-        dicodon_line = ' '.join([f"{d}:{count}" for d, count in dicodon_freq.items() if count > 0])
-        print("Dicodons with frequency > 0:", dicodon_line)
-
-    codon_dist = distance_matrix(codons_freqs, 'euclidean')
+    codon_dist = distance_matrix(codon_freqs, 'euclidean')
     dicodon_dist = distance_matrix(dicodon_freqs, 'euclidean')
 
-    print("\nCodon Distance Matrix:\n", codon_dist)
-    print("Dicodon Distance Matrix:\n", dicodon_dist)
+    save_phylip(codon_dist, all_names, "codon_distance.phy")
+    save_phylip(dicodon_dist, all_names, "dicodon_distance.phy")
+
+    print("\nCodon Distance Matrix (condensed for groups):\n", codon_dist)
+    print("\nDicodon Distance Matrix (condensed for groups):\n", dicodon_dist)
 
     return codon_dist, dicodon_dist
 
-###
+def save_phylip(matrix, names, filename="distance_matrix.phy"):
+    n = len(names)
+    with open(filename, 'w') as f:
+        f.write(f"{n}\n")
+        for i, name in enumerate(names):
+            distances = ' '.join([f"{matrix[i][j]:.3f}" for j in range(n)])
+            f.write(f"{name[:10]:<10} {distances}\n")
+    print(f"Distance matrix saved in PHYLIP format as {filename}")
+
 
 #
 # --method original
